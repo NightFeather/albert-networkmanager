@@ -15,4 +15,3 @@ Interact with NetworkManager over DBus
 
 ## TODO
   - [ ] Wifi AccessPoints
-  - [ ] Icons
