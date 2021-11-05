@@ -49,6 +49,15 @@ def make_connItem(dev, c, is_active = False):
     name = connName
     desc = f"Interface: {dev.Interface}"
     actions = []
+    
+    icon = iconLookup('unknown', 'default')
+
+    if dev.DeviceType in ( 2, 5, 6, 7, 30 ):
+        icon = iconLookup('network-wireless', 'default')
+    elif dev.DeviceType in ( 16, 17, 29 ):
+        icon = iconLookup('network-vpn', 'default')
+    elif dev.DeviceType in (1, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19):
+        icon = iconLookup('network-wired', 'default')
 
     if conn.Flags & 0x8 > 0:
         desc += ", External"
@@ -65,6 +74,7 @@ def make_connItem(dev, c, is_active = False):
 
     return Item(
         id=f"nm-conn-{dev.Interface}-{connName}",
+        icon=icon,
         text=name,
         subtext= desc,
         completion=f"nm {dev.Interface} {connName}",
