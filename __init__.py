@@ -5,6 +5,7 @@ import os
 
 __title__ = "NetworkManager Control"
 __doc__ = "Manage NetworkManager connections over DBus"
+__authors__ = "Nightfeather"
 __version__ = "0.4.1"
 __triggers__ = "nm "
 __py_deps__ = ["pydbus"]
