@@ -46,8 +46,7 @@ def initialize():
     daemon = bus.get("org.freedesktop.NetworkManager")
 
 def make_connItem(dev, conn, is_active = False):
-    connName = Path(conn.Filename).stem
-    name = connName
+    connName = conn.GetSettings()['connection']['id']
     desc = f"Interface: {dev.Interface}"
     actions = []
     
@@ -65,7 +64,7 @@ def make_connItem(dev, conn, is_active = False):
     else:
 
         if is_active:
-            name = "* " + name
+            connName = "* " + connName
             actions.append(
                 FuncAction("Deactivate", callable=lambda *_: daemon.DeactivateConnection(c))
             )
@@ -77,7 +76,7 @@ def make_connItem(dev, conn, is_active = False):
     return Item(
         id=f"nm-conn-{dev.Interface}-{connName}",
         icon=icon,
-        text=name,
+        text=connName,
         subtext= desc,
         completion=f"nm {dev.Interface} {connName}",
         actions=actions
@@ -85,29 +84,28 @@ def make_connItem(dev, conn, is_active = False):
 
 def enumerate_connections(candA = None, candB = None):
     candidates = []
-    for d in daemon.GetAllDevices():
+    for d in daemon.AllDevices:
         dev = bus.get('org.freedesktop.NetworkManager', d)
         if not dev.Managed or not dev.Real:
             continue
 
-        active_conn = "/"
         if dev.ActiveConnection != '/':
             aconn = bus.get('org.freedesktop.NetworkManager', dev.ActiveConnection)
             conn = bus.get('org.freedesktop.NetworkManager', aconn.Connection)
             candidates.append((dev, conn, True),)
 
         for c in dev.AvailableConnections:
-            if c is active_conn:
+            if c is dev.ActiveConnection:
                 continue
             conn = bus.get('org.freedesktop.NetworkManager', c)
             candidates.append((dev, conn, False),)
 
     if candA is not None:
-        candidates = filter(lambda c: c[0].Interface.startswith(candA) or Path(c[1].Filename).stem.lower().startswith(candA), candidates)
-    elif candB is not None:
-        candidates = filter(lambda c: c[0].Interface.startswith(candB) and Path(c[1].Filename).stem.lower().startswith(candA), candidates)
+        candidates = filter(lambda c: c[0].Interface.startswith(candA) or c[1].GetSettings()['connection']['id'].lower().startswith(candA), candidates)
+    if candB is not None:
+        candidates = filter(lambda c: c[1].GetSettings()['connection']['id'].lower().startswith(candB), candidates)
 
-    return [ make_connItem(*ct) for ct in sorted(candidates, key=lambda c: (not c[2], Path(c[1].Filename).stem, c[0].Interface) )]
+    return [ make_connItem(*ct) for ct in sorted(candidates, key=lambda c: (not c[2], c[1].GetSettings()['connection']['id'], c[0].Interface) )]
 
 def handleQuery(query: Query):
 
