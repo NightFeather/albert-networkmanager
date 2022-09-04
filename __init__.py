@@ -2,6 +2,7 @@ from albert import *
 from enum import Enum
 from pydbus import SystemBus
 import os
+from pathlib import Path
 
 __title__ = "NetworkManager Control"
 __doc__ = "Manage NetworkManager connections over DBus"
@@ -44,9 +45,8 @@ def initialize():
     global daemon
     daemon = bus.get("org.freedesktop.NetworkManager")
 
-def make_connItem(dev, c, is_active = False):
-    conn = bus.get('org.freedesktop.NetworkManager', c)
-    connName = os.path.basename(conn.Filename).rsplit(".", maxsplit=1)[0]
+def make_connItem(dev, conn, is_active = False):
+    connName = Path(conn.Filename).stem
     name = connName
     desc = f"Interface: {dev.Interface}"
     actions = []
@@ -63,14 +63,15 @@ def make_connItem(dev, c, is_active = False):
     if conn.Flags & 0x8 > 0:
         desc += ", External"
     else:
-        actions.append(
-            FuncAction("Activate", callable=lambda *_: daemon.ActivateConnection(c, dev._path, "/")),
-        )
 
         if is_active:
             name = "* " + name
             actions.append(
-                FuncAction("Disconnect", callable=lambda *_: dev.Disconnect())
+                FuncAction("Deactivate", callable=lambda *_: daemon.DeactivateConnection(c))
+            )
+        else:
+            actions.append(
+                FuncAction("Activate", callable=lambda *_: daemon.ActivateConnection(c, dev._path, "/")),
             )
 
     return Item(
@@ -82,29 +83,31 @@ def make_connItem(dev, c, is_active = False):
         actions=actions
     )
 
-
-def enumerate_connections(devcand = "", conncand = ""):
-    items = []
+def enumerate_connections(candA = None, candB = None):
+    candidates = []
     for d in daemon.GetAllDevices():
         dev = bus.get('org.freedesktop.NetworkManager', d)
         if not dev.Managed or not dev.Real:
             continue
 
-        if len(devcand) > 0 and not dev.Interface.startswith(devcand):
-            continue
-
         active_conn = "/"
         if dev.ActiveConnection != '/':
             aconn = bus.get('org.freedesktop.NetworkManager', dev.ActiveConnection)
-            active_conn = aconn.Connection
-
-            items.append(make_connItem(dev, active_conn, True))
+            conn = bus.get('org.freedesktop.NetworkManager', aconn.Connection)
+            candidates.append((dev, conn, True),)
 
         for c in dev.AvailableConnections:
-            if c != active_conn:
-               items.append(make_connItem(dev, c))
+            if c is active_conn:
+                continue
+            conn = bus.get('org.freedesktop.NetworkManager', c)
+            candidates.append((dev, conn, False),)
 
-    return items
+    if candA is not None:
+        candidates = filter(lambda c: c[0].Interface.startswith(candA) or Path(c[1].Filename).stem.lower().startswith(candA), candidates)
+    elif candB is not None:
+        candidates = filter(lambda c: c[0].Interface.startswith(candB) and Path(c[1].Filename).stem.lower().startswith(candA), candidates)
+
+    return [ make_connItem(*ct) for ct in sorted(candidates, key=lambda c: (not c[2], Path(c[1].Filename).stem, c[0].Interface) )]
 
 def handleQuery(query: Query):
 
@@ -112,7 +115,7 @@ def handleQuery(query: Query):
         return
 
     query.disableSort()
-    cand = query.string.strip().split() + ["", ""]
+    cand = (query.string.strip().split() + [ None, None])[:2]
 
-    return enumerate_connections(cand[0], cand[1])
+    return enumerate_connections(*cand)
 
