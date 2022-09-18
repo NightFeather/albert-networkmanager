@@ -45,40 +45,42 @@ def initialize():
     global daemon
     daemon = bus.get("org.freedesktop.NetworkManager")
 
-def make_connItem(dev, conn, is_active = False):
-    connName = conn.GetSettings()['connection']['id']
-    desc = f"Interface: {dev.Interface}"
+def make_connItem(*, device, connection, active = False):
+    connName = connection.GetSettings()['connection']['id']
+    desc = f"Interface: {device.Interface}"
     actions = []
     
     icon = iconLookup('unknown', 'default')
 
-    if dev.DeviceType in ( 2, 5, 6, 7, 30 ):
+    if device.DeviceType in ( 2, 5, 6, 7, 30 ):
         icon = iconLookup('network-wireless', 'default')
-    elif dev.DeviceType in ( 16, 17, 29 ):
+    elif device.DeviceType in ( 16, 17, 29 ):
         icon = iconLookup('network-vpn', 'default')
-    elif dev.DeviceType in (1, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19):
+    elif device.DeviceType in (1, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19):
         icon = iconLookup('network-wired', 'default')
 
-    if conn.Flags & 0x8 > 0:
+    if connection.Flags & 0x8 > 0:
         desc += ", External"
     else:
-
-        if is_active:
+        if active:
             connName = "* " + connName
             actions.append(
-                FuncAction("Deactivate", callable=lambda *_: daemon.DeactivateConnection(c))
+                FuncAction("Reactivate", callable=lambda *_: daemon.ActivateConnection(connection._path, device._path, "/")),
+            )
+            actions.append(
+                FuncAction("Deactivate", callable=lambda *_: daemon.DeactivateConnection(connection._path))
             )
         else:
             actions.append(
-                FuncAction("Activate", callable=lambda *_: daemon.ActivateConnection(c, dev._path, "/")),
+                FuncAction("Activate", callable=lambda *_: daemon.ActivateConnection(connection._path, device._path, "/")),
             )
 
     return Item(
-        id=f"nm-conn-{dev.Interface}-{connName}",
+        id=f"nm-connection-{device.Interface}-{connName}",
         icon=icon,
         text=connName,
         subtext= desc,
-        completion=f"nm {dev.Interface} {connName}",
+        completion=f"nm {device.Interface} {connName}",
         actions=actions
     )
 
@@ -92,20 +94,20 @@ def enumerate_connections(candA = None, candB = None):
         if dev.ActiveConnection != '/':
             aconn = bus.get('org.freedesktop.NetworkManager', dev.ActiveConnection)
             conn = bus.get('org.freedesktop.NetworkManager', aconn.Connection)
-            candidates.append((dev, conn, True),)
+            candidates.append({ 'device': dev, 'connection': conn, 'active': True})
 
         for c in dev.AvailableConnections:
             if c is dev.ActiveConnection:
                 continue
             conn = bus.get('org.freedesktop.NetworkManager', c)
-            candidates.append((dev, conn, False),)
+            candidates.append({ 'device': dev, 'connection': conn, 'active': False})
 
     if candA is not None:
-        candidates = filter(lambda c: c[0].Interface.startswith(candA) or c[1].GetSettings()['connection']['id'].lower().startswith(candA), candidates)
+        candidates = filter(lambda c: c['device'].Interface.startswith(candA) or c['connection'].GetSettings()['connection']['id'].lower().startswith(candA), candidates)
     if candB is not None:
-        candidates = filter(lambda c: c[1].GetSettings()['connection']['id'].lower().startswith(candB), candidates)
+        candidates = filter(lambda c: c['connection'].GetSettings()['connection']['id'].lower().startswith(candB), candidates)
 
-    return [ make_connItem(*ct) for ct in sorted(candidates, key=lambda c: (not c[2], c[1].GetSettings()['connection']['id'], c[0].Interface) )]
+    return [ make_connItem(**ct) for ct in sorted(candidates, key=lambda c: (not c['active'], c['connection'].GetSettings()['connection']['id'], c['device'].Interface) )]
 
 def handleQuery(query: Query):
 
