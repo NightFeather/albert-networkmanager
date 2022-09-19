@@ -45,7 +45,7 @@ def initialize():
     global daemon
     daemon = bus.get("org.freedesktop.NetworkManager")
 
-def make_connItem(*, device, connection, active = False):
+def make_connItem(*, device, connection, active = None):
     connName = connection.GetSettings()['connection']['id']
     desc = f"Interface: {device.Interface}"
     actions = []
@@ -62,13 +62,13 @@ def make_connItem(*, device, connection, active = False):
     if connection.Flags & 0x8 > 0:
         desc += ", External"
     else:
-        if active:
+        if active is not None:
             connName = "* " + connName
             actions.append(
                 FuncAction("Reactivate", callable=lambda *_: daemon.ActivateConnection(connection._path, device._path, "/")),
             )
             actions.append(
-                FuncAction("Deactivate", callable=lambda *_: daemon.DeactivateConnection(connection._path))
+                FuncAction("Deactivate", callable=lambda *_: daemon.DeactivateConnection(active._path))
             )
         else:
             actions.append(
@@ -94,20 +94,20 @@ def enumerate_connections(candA = None, candB = None):
         if dev.ActiveConnection != '/':
             aconn = bus.get('org.freedesktop.NetworkManager', dev.ActiveConnection)
             conn = bus.get('org.freedesktop.NetworkManager', aconn.Connection)
-            candidates.append({ 'device': dev, 'connection': conn, 'active': True})
+            candidates.append({ 'device': dev, 'connection': conn, 'active': aconn})
 
         for c in dev.AvailableConnections:
             if c is dev.ActiveConnection:
                 continue
             conn = bus.get('org.freedesktop.NetworkManager', c)
-            candidates.append({ 'device': dev, 'connection': conn, 'active': False})
+            candidates.append({ 'device': dev, 'connection': conn, 'active': None})
 
     if candA is not None:
         candidates = filter(lambda c: c['device'].Interface.startswith(candA) or c['connection'].GetSettings()['connection']['id'].lower().startswith(candA), candidates)
     if candB is not None:
         candidates = filter(lambda c: c['connection'].GetSettings()['connection']['id'].lower().startswith(candB), candidates)
 
-    return [ make_connItem(**ct) for ct in sorted(candidates, key=lambda c: (not c['active'], c['connection'].GetSettings()['connection']['id'], c['device'].Interface) )]
+    return [ make_connItem(**ct) for ct in sorted(candidates, key=lambda c: (c['active'] is None, c['connection'].GetSettings()['connection']['id'], c['device'].Interface) )]
 
 def handleQuery(query: Query):
 
