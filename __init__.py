@@ -58,7 +58,7 @@ class Plugin(QueryHandler):
     def finalize(self):
         pass
 
-    def make_connItem(self, *, device, connection, active = None):
+    def make_item(self, *, device, connection, active = None):
         connName = connection.GetSettings()['connection']['id']
         desc = f"Interface: {device.Interface}"
         actions = []
@@ -91,7 +91,7 @@ class Plugin(QueryHandler):
             id=f"nm-connection-{device.Interface}-{connName}",
             icon=icon,
             text=connName,
-            subtext= desc,
+            subtext=desc,
             completion=f"nm {device.Interface} {connName}",
             actions=actions
         )
@@ -122,7 +122,7 @@ class Plugin(QueryHandler):
                 c['connection'].GetSettings()['connection']['id'].lower().startswith(candB or candA)
             ), candidates)
     
-        return [ self.make_connItem(**ct) for ct in sorted(candidates, key=lambda c: (c['active'] is None, c['connection'].GetSettings()['connection']['id'], c['device'].Interface) )]
+        return [ self.make_item(**ct) for ct in sorted(candidates, key=lambda c: (c['active'] is None, c['connection'].GetSettings()['connection']['id'], c['device'].Interface) )]
     
     def handleQuery(self, query: Query):
     
