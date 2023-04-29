@@ -71,11 +71,13 @@ class Plugin(QueryHandler):
             icon = ['xdg:network-vpn']
         elif device.DeviceType in (1, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19):
             icon = ['xdg:network-wired']
-    
+   
+        disp = connName
         if connection.Flags & 0x8 > 0:
             desc += ", External"
         else:
             if active is not None:
+                disp = f"* {disp}"
                 actions.append(
                     Action("reactivate", "Reactivate", lambda *_: self.daemon.ActivateConnection(connection._path, device._path, "/")),
                 )
@@ -90,7 +92,7 @@ class Plugin(QueryHandler):
         return Item(
             id=f"nm-connection-{device.Interface}-{connName}",
             icon=icon,
-            text=connName,
+            text=disp,
             subtext=desc,
             completion=f"nm {device.Interface} {connName}",
             actions=actions
@@ -111,7 +113,7 @@ class Plugin(QueryHandler):
                 candidates.append({ 'device': dev, 'connection': conn, 'active': aconn})
     
             for c in dev.AvailableConnections:
-                if c is active_conn:
+                if c == active_conn:
                     continue
                 conn = self.bus.get('org.freedesktop.NetworkManager', c)
                 candidates.append({ 'device': dev, 'connection': conn, 'active': None})
