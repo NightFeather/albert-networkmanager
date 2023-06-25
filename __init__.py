@@ -4,7 +4,7 @@ from pydbus import SystemBus
 import os
 from pathlib import Path
 
-md_iid = "0.5"
+md_iid = "1.0"
 md_id = "nm"
 md_version = "0.5"
 md_name = "NetworkManager Control"
@@ -13,6 +13,8 @@ md_license = "MIT"
 md_url = "https://github.com/Nightfeather/albert-nm"
 md_maintainers = "@Nightfeather"
 md_bin_dependencies = [ "NetworkManager", "nm-connection-editor" ]
+
+NM_DBUS_NAME = 'org.freedesktop.NetworkManager'
 
 class DeviceType(Enum):
     UNKNWON = 0
@@ -50,10 +52,13 @@ class Plugin(QueryHandler):
     def description(self):
         return md_description
 
+    def synopsis(self):
+        return "<Connection> [Device]"
+
     def initialize(self):
         self.bus = SystemBus()
         self.bus.autoclose = True
-        self.daemon = self.bus.get("org.freedesktop.NetworkManager")
+        self.daemon = self.bus.get(NM_DBUS_NAME)
 
     def finalize(self):
         pass
@@ -62,77 +67,96 @@ class Plugin(QueryHandler):
         connName = connection.GetSettings()['connection']['id']
         desc = f"Interface: {device.Interface}"
         actions = []
-        
+
         icon = ['xdg:unknown']
-    
+
         if device.DeviceType in ( 2, 5, 6, 7, 30 ):
             icon = ['xdg:network-wireless']
         elif device.DeviceType in ( 16, 17, 29 ):
             icon = ['xdg:network-vpn']
         elif device.DeviceType in (1, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19):
             icon = ['xdg:network-wired']
-   
+
         disp = connName
+
         if connection.Flags & 0x8 > 0:
             desc += ", External"
+
+        if active:
+            disp = f"* {disp}"
+            actions.append(
+                Action("reactivate", "Reactivate", lambda *_: self.daemon.ActivateConnection(connection._path, device._path, "/")),
+            )
+            actions.append(
+                Action("deactivate", "Deactivate", lambda *_: self.daemon.DeactivateConnection(active._path))
+            )
         else:
-            if active is not None:
-                disp = f"* {disp}"
-                actions.append(
-                    Action("reactivate", "Reactivate", lambda *_: self.daemon.ActivateConnection(connection._path, device._path, "/")),
-                )
-                actions.append(
-                    Action("deactivate", "Deactivate", lambda *_: self.daemon.DeactivateConnection(active._path))
-                )
-            else:
-                actions.append(
-                    Action("activate", "Activate", lambda *_: self.daemon.ActivateConnection(connection._path, device._path, "/")),
-                )
-    
+            actions.append(
+                Action("activate", "Activate", lambda *_: self.daemon.ActivateConnection(connection._path, device._path, "/")),
+            )
+
         return Item(
             id=f"nm-connection-{device.Interface}-{connName}",
             icon=icon,
             text=disp,
             subtext=desc,
-            completion=f"nm {device.Interface} {connName}",
+            completion=f"nm {connName} {device.Interface}",
             actions=actions
         )
-    
-    def enumerate_connections(self, candA = None, candB = None):
-        candidates = []
+
+    def list_devices(self):
+        devices = []
         for d in self.daemon.AllDevices:
-            dev = self.bus.get('org.freedesktop.NetworkManager', d)
+            dev = self.bus.get(NM_DBUS_NAME, d)
             if not dev.Managed or not dev.Real:
                 continue
-    
-            active_conn = None
-            if dev.ActiveConnection != '/':
-                aconn = self.bus.get('org.freedesktop.NetworkManager', dev.ActiveConnection)
-                active_conn = aconn.Connection
-                conn = self.bus.get('org.freedesktop.NetworkManager', aconn.Connection)
-                candidates.append({ 'device': dev, 'connection': conn, 'active': aconn})
-    
+            devices.append(dev)
+        return devices
+
+    def list_available_connections(self, devices):
+        connections = []
+        for dev in devices:
             for c in dev.AvailableConnections:
-                if c == active_conn:
-                    continue
-                conn = self.bus.get('org.freedesktop.NetworkManager', c)
-                candidates.append({ 'device': dev, 'connection': conn, 'active': None})
-    
-        if candA is not None:
-            candidates = filter(lambda c: (
-                c['device'].Interface.startswith(candA) or
-                c['connection'].GetSettings()['connection']['id'].lower().startswith(candB or candA)
-            ), candidates)
-    
-        return [ self.make_item(**ct) for ct in sorted(candidates, key=lambda c: (c['active'] is None, c['connection'].GetSettings()['connection']['id'], c['device'].Interface) )]
-    
-    def handleQuery(self, query: Query):
-    
-        if not query.isValid:
-            return
-    
-        cand = (query.string.strip().split() + [None, None])[:2]
-    
-        for item in self.enumerate_connections(*cand):
-            query.add(item)
+                conn = self.bus.get(NM_DBUS_NAME, c)
+                connections.append((conn, dev))
+        return connections
+
+    def list_active_connections(self, devices):
+        connections = []
+        for dev in devices:
+            if dev.ActiveConnection != '/':
+                aconn = self.bus.get(NM_DBUS_NAME, dev.ActiveConnection)
+                conn = self.bus.get(NM_DBUS_NAME, aconn.Connection)
+                connections.append((conn, dev))
+        return connections
+
+    def enumerate_connections(self, matchConnection = "", matchDevice = ""):
+        devices = self.list_devices()
+        if matchDevice != "":
+            devices = [ dev for dev in devices if dev.Interface.startswith(matchDevice.lower()) ]
+
+        connections = self.list_available_connections(devices)
+        if matchConnection != "":
+            connections = [ conn for conn in connections if conn[0].GetSettings()['connection']['id'].lower().startswith(matchConnection.lower()) ]
+        active_connections = self.list_active_connections(devices)
+
+        items = []
+
+        for conn, dev in connections:
+            is_active = next(filter((lambda args: args[0].Filename == conn.Filename and args[1].Interface == dev.Interface), active_connections), None) is not None
+            item = self.make_item(device=dev, connection=conn, active=is_active)
+            score = 0.0
+            score += 2 if conn.Flags & 0x8 == 0 else 0
+            score += len(matchDevice)/len(dev.Interface)
+            score += len(matchConnection)/len(conn.GetSettings()['connection']['id'])
+            score += 1 if is_active else 0
+            items.append(RankItem(item=item, score=score/5))
+
+        return items
+
+    def handleGlobalQuery(self, query: GlobalQuery):
+
+        args = query.string.strip().split()
+
+        return self.enumerate_connections(*args)
 
