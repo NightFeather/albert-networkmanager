@@ -3,8 +3,9 @@ from enum import Enum
 from pydbus import SystemBus
 import os
 from pathlib import Path
+from typing import List
 
-md_iid = "1.0"
+md_iid = "2.0"
 md_id = "nm"
 md_version = "0.5"
 md_name = "NetworkManager Control"
@@ -41,27 +42,14 @@ class DeviceType(Enum):
     WIREGUARD = 29
     WIFI_P2P = 30
 
-class Plugin(QueryHandler):
+class Plugin(PluginInstance, TriggerQueryHandler):
+    def __init__(self):
+        TriggerQueryHandler.__init__(self, md_id, md_name, md_description, '<Connection> [Device]', 'nm')
+        PluginInstance.__init__(self, [self])
 
-    def id(self):
-        return md_id
-
-    def name(self):
-        return md_name
-
-    def description(self):
-        return md_description
-
-    def synopsis(self):
-        return "<Connection> [Device]"
-
-    def initialize(self):
         self.bus = SystemBus()
         self.bus.autoclose = True
         self.daemon = self.bus.get(NM_DBUS_NAME)
-
-    def finalize(self):
-        pass
 
     def make_item(self, *, device, connection, active = None):
         connName = connection.GetSettings()['connection']['id']
@@ -95,13 +83,10 @@ class Plugin(QueryHandler):
                 Action("activate", "Activate", lambda *_: self.daemon.ActivateConnection(connection._path, device._path, "/")),
             )
 
-        return Item(
-            id=f"nm-connection-{device.Interface}-{connName}",
-            icon=icon,
-            text=disp,
-            subtext=desc,
-            completion=f"nm {connName} {device.Interface}",
-            actions=actions
+        return StandardItem(
+            f"nm-connection-{device.Interface}-{connName}",
+            disp, desc, f"{connName} {device.Interface}",
+            icon, actions
         )
 
     def list_devices(self):
@@ -145,18 +130,12 @@ class Plugin(QueryHandler):
         for conn, dev in connections:
             is_active = next(filter((lambda args: args[0].Filename == conn.Filename and args[1].Interface == dev.Interface), active_connections), None) is not None
             item = self.make_item(device=dev, connection=conn, active=is_active)
-            score = 0.0
-            score += 2 if conn.Flags & 0x8 == 0 else 0
-            score += len(matchDevice)/len(dev.Interface)
-            score += len(matchConnection)/len(conn.GetSettings()['connection']['id'])
-            score += 1 if is_active else 0
-            items.append(RankItem(item=item, score=score/5))
+            items.append(item)
 
         return items
 
-    def handleGlobalQuery(self, query: GlobalQuery):
-
+    def handleTriggerQuery(self, query: TriggerQuery):
         args = query.string.strip().split()
 
-        return self.enumerate_connections(*args)
+        query.add(self.enumerate_connections(*args))
 
