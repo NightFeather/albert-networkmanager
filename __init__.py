@@ -1,3 +1,4 @@
+from __future__ import annotations
 from albert import *
 from enum import Enum
 from pydbus import SystemBus
@@ -13,6 +14,7 @@ md_description = "Manage NetworkManager connections over DBus"
 md_license = "MIT"
 md_url = "https://github.com/Nightfeather/albert-nm"
 md_maintainers = "@Nightfeather"
+md_lib_dependencies = [ 'pydbus' ]
 md_bin_dependencies = [ "NetworkManager", "nm-connection-editor" ]
 
 NM_DBUS_NAME = 'org.freedesktop.NetworkManager'
