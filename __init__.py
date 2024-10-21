@@ -6,15 +6,14 @@ import os
 from pathlib import Path
 from typing import List
 
-md_iid = "2.0"
-md_id = "nm"
-md_version = "0.5"
+md_iid = "2.4"
+md_version = "0.6"
 md_name = "NetworkManager Control"
 md_description = "Manage NetworkManager connections over DBus"
 md_license = "MIT"
 md_url = "https://github.com/Nightfeather/albert-nm"
-md_maintainers = "@Nightfeather"
-md_lib_dependencies = [ 'pydbus' ]
+md_authors = "@Nightfeather"
+md_lib_dependencies = [ 'pydbus', 'pygobject' ]
 md_bin_dependencies = [ "NetworkManager", "nm-connection-editor" ]
 
 NM_DBUS_NAME = 'org.freedesktop.NetworkManager'
