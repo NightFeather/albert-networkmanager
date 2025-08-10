@@ -6,8 +6,9 @@ import os
 from pathlib import Path
 from typing import List
 
-md_iid = "2.4"
-md_version = "0.6"
+md_id = "tw.nightfeather.albert-nm"
+md_iid = "3.0"
+md_version = "0.7"
 md_name = "NetworkManager Control"
 md_description = "Manage NetworkManager connections over DBus"
 md_license = "MIT"
@@ -45,12 +46,20 @@ class DeviceType(Enum):
 
 class Plugin(PluginInstance, TriggerQueryHandler):
     def __init__(self):
-        TriggerQueryHandler.__init__(self, md_id, md_name, md_description, '<Connection> [Device]', 'nm')
-        PluginInstance.__init__(self, [self])
+        # TriggerQueryHandler.__init__(self, md_id, md_name, md_description, '<Connection> [Device]', 'nm')
+        # PluginInstance.__init__(self, [self])
+        TriggerQueryHandler.__init__(self)
+        PluginInstance.__init__(self)
 
         self.bus = SystemBus()
         self.bus.autoclose = True
         self.daemon = self.bus.get(NM_DBUS_NAME)
+
+    def defaultTrigger(self):
+        return "nm "
+
+    def synopsis(self, query):
+        return  "<Connection> [Device]"
 
     def make_item(self, *, device, connection, active = None):
         connName = connection.GetSettings()['connection']['id']
